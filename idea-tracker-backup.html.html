@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>想法追踪器 · 私人任务与灵感管理</title>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      // 安全列表：确保动态生成的类名能被 CDN 扫描到
+      safelist: [
+        // 风险等级标签颜色
+        'bg-red-100', 'text-red-700', 'bg-red-500',
+        'bg-orange-100', 'text-orange-700', 'bg-orange-500',
+        'bg-green-100', 'text-green-700', 'bg-green-500',
+        // 卡片边框色
+        'border-red-200', 'border-orange-200',
+        // 状态标签颜色
+        'bg-gray-100', 'text-gray-700',
+        'bg-blue-100', 'text-blue-700',
+        'bg-yellow-100', 'text-yellow-700',
+        'bg-purple-100', 'text-purple-700',
+        'bg-teal-100', 'text-teal-700',
+        'bg-slate-200', 'text-slate-500',
+        // 文本截断
+        'line-clamp-1', 'line-clamp-2',
+        // 悬停效果
+        'hover:shadow-md',
+        'hover:bg-blue-100', 'hover:bg-red-100',
+        'active:bg-blue-200', 'active:bg-red-200',
+        // 其他工具类
+        'w-16', 'w-3.5', 'h-3.5',
+        'text-xs', 'gap-1', 'gap-1.5',
+        'flex', 'inline-flex', 'items-center', 'justify-center',
+        'w-full', 'h-1.5', 'h-2', 'h-2.5',
+        'rounded-full', 'rounded-lg',
+        'px-2', 'px-3', 'py-0.5', 'py-1', 'py-1.5',
+        'mt-0.5', 'space-y-1',
+        'transition-shadow', 'transition-colors',
+        'font-medium', 'font-semibold',
+        'leading-snug',
+        'whitespace-nowrap',
+        'shrink-0',
+        // 新动态类: 完成按钮 + 侧边栏折叠
+        'bg-green-600', 'hover:bg-green-700', 'text-white',
+        'bg-gray-200', 'hover:bg-gray-300', 'text-gray-600',
+        'w-16', 'lg:w-16', 'overflow-hidden',
+        'gap-3', 'px-1.5',
+        'active:scale-95',
+      ],
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Newsreader', 'Georgia', 'serif'],
+            sans:    ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          colors: {
+            /* 项目专属色板 */
+            brand: {
+              50:  '#eef2ff',
+              100: '#e0e7ff',
+              500: '#4f46e5',
+              600: '#4338ca',
+              700: '#3730a3',
+            },
+            surface: {
+              bg:    '#f8fafc',
+              card:  '#ffffff',
+              muted: '#f1f5f9',
+              border:'#e8ecf1',
+            },
+          },
+        }
+      }
+    }
+  </script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ===== 自定义样式 ===== */
+
+    /* 移动端侧边栏滑入动画 */
+    .sidebar-overlay {
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .sidebar-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .sidebar-panel {
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+    }
+    .sidebar-panel.active {
+      transform: translateX(0);
+    }
+
+    /* Toast 通知动画 */
+    .toast-enter {
+      animation: slideInRight 0.3s ease forwards;
+    }
+    .toast-exit {
+      animation: slideOutRight 0.3s ease forwards;
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(120%); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    @keyframes slideOutRight {
+      from { transform: translateX(0);    opacity: 1; }
+      to   { transform: translateX(120%); opacity: 0; }
+    }
+
+    /* 进度条过渡 */
+    .progress-fill {
+      transition: width 0.5s ease;
+      min-width: 4px; /* 修复 #9：分数为 0 时进度条仍然可见 */
+    }
+
+    /* 修复 #6：iOS Safari 侧边栏打开时防止背景滚动穿透 */
+    body.sidebar-locked {
+      position: fixed;
+      width: 100%;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    /* 自定义滚动条 */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* 加载旋转器 */
+    .spinner {
+      border: 3px solid #e2e8f0;
+      border-top: 3px solid #2563eb;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* :has() 伪类回退 — 确保单选/复选框选中时的视觉反馈 */
+    .radio-card:has(input:checked),
+    .checkbox-pill:has(input:checked) {
+      border-color: #3b82f6;
+      background-color: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    /* UI#5: Toast 倒计时进度条收缩动画 */
+    @keyframes toast-timer {
+      from { width: 100%; }
+      to   { width: 0%; }
+    }
+    .toast-timer-bar {
+      animation: toast-timer 3.5s linear forwards;
+    }
+
+    /* UI#4: 表格行风险等级左边框 */
+    .row-risk-high   { border-left: 4px solid #ef4444; }
+    .row-risk-medium { border-left: 4px solid #f97316; }
+    .row-risk-healthy{ border-left: 4px solid #22c55e; }
+    /* 按钮按压反馈 */
+    .btn-press:active { transform: scale(0.95); }
+
+    /* 桌面端侧边栏折叠态 */
+    @media (min-width: 1024px) {
+      .sidebar-collapsed { width: 56px !important; min-width: 56px !important; }
+      .sidebar-collapsed > div > * { display: none !important; }
+      .sidebar-collapsed > div > #sidebar-collapse-btn { display: flex !important; }
+    }
+    /* 多选模式 */
+    .select-col { display: none; }
+    .select-mode .select-col { display: table-cell; }
+    #batch-bar { transform: translateY(100%); transition: transform 0.3s ease; }
+    #batch-bar.active { transform: translateY(0); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- ===== 修复#1：访问密码弹窗 ===== -->
+  <div id="password-gate" class="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-100">
+    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm mx-4 text-center">
+      <h1 class="text-2xl font-display font-semibold text-slate-800 mb-2">💡 想法追踪器</h1>
+      <p class="text-sm text-slate-400 mb-6">输入密码以访问你的私人空间</p>
+      <input type="password" id="password-input" placeholder="输入密码…"
+             class="w-full px-4 py-3 text-sm border border-gray-300 rounded-xl text-center tracking-widest
+                    focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none mb-3">
+      <button id="password-submit"
+              class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors">
+        进入
+      </button>
+      <p id="password-error" class="text-xs text-red-500 mt-3 hidden">密码错误，请重试</p>
+    </div>
+  </div>
+  <style>
+    @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-4px); } }
+    .shake { animation: shake 0.4s ease; }
+  </style>
+  <script>
+    (function() {
+      if (sessionStorage.getItem('auth') === 'ok') {
+        document.getElementById('password-gate').style.display = 'none';
+        return;
+      }
+      document.getElementById('password-submit').addEventListener('click', () => {
+        const input = document.getElementById('password-input');
+        if (input.value === 'myideas2024') {
+          sessionStorage.setItem('auth', 'ok');
+          document.getElementById('password-gate').style.display = 'none';
+        } else {
+          document.getElementById('password-error').classList.remove('hidden');
+          input.classList.add('shake');
+          input.value = '';
+          setTimeout(() => input.classList.remove('shake'), 400);
+        }
+      });
+      document.getElementById('password-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.getElementById('password-submit').click();
+      });
+    })();
+  </script>
+
+  <!-- ==================== Toast 通知容器 ==================== -->
+  <div id="toast-container" class="fixed top-4 right-4 z-[9999] flex flex-col gap-2" aria-live="polite"></div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+    <div class="flex items-center justify-between px-4 py-3 lg:px-6">
+      <!-- 左侧：移动端菜单按钮 + 标题 -->
+      <div class="flex items-center gap-3">
+        <button id="menu-toggle"
+                class="lg:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100 text-slate-600 transition-colors"
+                aria-label="打开菜单">
+          <!-- 汉堡菜单图标 -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
+        <h1 class="text-xl font-semibold text-slate-900 tracking-tight">
+          💡 想法追踪器
+        </h1>
+      </div>
+
+      <!-- 右侧：刷新按钮 -->
+      <button id="refresh-btn"
+              class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
+              aria-label="刷新数据">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+        </svg>
+        刷新
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== 主布局容器 ==================== -->
+  <div class="flex flex-col lg:flex-row">
+
+    <!-- ========== 移动端覆盖层 ========== -->
+    <div id="sidebar-overlay"
+         class="sidebar-overlay fixed inset-0 bg-black/30 z-40 lg:hidden"
+         aria-hidden="true"></div>
+
+    <!-- ========== 左侧边栏：想法录入表单 ========== -->
+    <aside id="sidebar"
+           class="sidebar-panel fixed top-0 left-0 h-full w-80 max-w-[85vw] bg-white border-r border-gray-200 z-50 overflow-y-auto
+                  lg:static lg:translate-x-0 lg:w-96 lg:min-w-[320px] lg:max-w-none lg:z-auto lg:sticky lg:top-[57px] lg:h-[calc(100vh-57px)]">
+      <div class="p-5 lg:p-6">
+        <!-- 关闭按钮（仅移动端可见） -->
+        <button id="sidebar-close"
+                class="lg:hidden absolute top-4 right-4 p-1 rounded-lg hover:bg-gray-100 text-slate-500 transition-colors"
+                aria-label="关闭菜单">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <!-- 侧边栏顶部提示 + 桌面端折叠按钮 -->
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-lg font-display font-semibold text-slate-900 flex items-center gap-2 sidebar-expanded-only">
+          <!-- PlusCircle 图标 -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-brand-500">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          记录新想法
+          </h2>
+        </div>
+        <button id="sidebar-collapse-btn" class="hidden lg:flex absolute top-3 right-3 p-1.5 rounded-lg hover:bg-gray-100 text-slate-400 transition-colors z-10" aria-label="折叠侧边栏">&larr;</button>
+        <p class="text-xs text-slate-400 mb-4 leading-relaxed sidebar-expanded-only">💡 <strong>行动打卡</strong> = 记录进展 &nbsp;|&nbsp; <strong>标记完成</strong> = 任务结束<br>遗忘温度随无行动天数上升</p>
+
+        <!-- ===== 录入表单 ===== -->
+        <form id="idea-form" class="space-y-4">
+          <input type="hidden" id="edit-id" value="">
+          <!-- 标题 -->
+          <div>
+            <label for="form-title" class="block text-sm font-medium text-slate-700 mb-1">
+              标题 <span class="text-red-500">*</span>
+            </label>
+            <input type="text" id="form-title" name="Title" required
+                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm
+                          focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow
+                          placeholder:text-slate-400"
+                   placeholder="输入想法标题…">
+          </div>
+
+          <!-- 类型 -->
+          <div>
+            <span class="block text-sm font-medium text-slate-700 mb-2">
+              类型 <span class="text-red-500">*</span>
+            </span>
+            <div class="flex gap-3" role="radiogroup" aria-label="类型选择">
+              <label class="radio-card flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer
+                            hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700">
+                <input type="radio" name="Type" value="Task" checked class="sr-only">
+                <!-- 任务图标 -->
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15a2.25 2.25 0 0 1 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" />
+                </svg>
+                <span class="text-sm font-medium">任务</span>
+              </label>
+              <label class="radio-card flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer
+                            hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700">
+                <input type="radio" name="Type" value="Inspiration" class="sr-only">
+                <!-- 灵感灯泡图标 -->
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.25a12.06 12.06 0 0 1-4.5 0" />
+                </svg>
+                <span class="text-sm font-medium">灵感</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 分类（多选） -->
+          <div>
+            <span class="block text-sm font-medium text-slate-700 mb-2">分类</span>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="分类选择">
+              <label class="checkbox-pill flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-full cursor-pointer
+                            hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700 text-sm">
+                <input type="checkbox" name="Category" value="工作" class="sr-only"> 工作
+              </label>
+              <label class="checkbox-pill flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-full cursor-pointer
+                            hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700 text-sm">
+                <input type="checkbox" name="Category" value="生活" class="sr-only"> 生活
+              </label>
+              <label class="checkbox-pill flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-full cursor-pointer
+                            hover:border-blue-400 transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-700 text-sm">
+                <input type="checkbox" name="Category" value="学习" class="sr-only"> 学习
+              </label>
+            </div>
+          </div>
+
+          <!-- 状态 -->
+          <div>
+            <label for="form-status" class="block text-sm font-medium text-slate-700 mb-1">状态</label>
+            <select id="form-status" name="Status"
+                    class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm
+                           focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white">
+              <option value="念头">念头</option>
+              <option value="已计划">已计划</option>
+              <option value="执行中" class="task-only-option">执行中</option>
+              <option value="已完成" class="task-only-option">已完成</option>
+              <option value="已放弃" class="task-only-option">已放弃</option>
+              <option value="待探索">待探索</option>
+              <option value="已探索">已探索</option>
+            </select>
+          </div>
+
+          <!-- 截止日期 -->
+          <div id="deadline-field">
+            <label for="form-deadline" class="block text-sm font-medium text-slate-700 mb-1">截止日期</label>
+            <input type="date" id="form-deadline" name="Deadline"
+                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm
+                          focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+          </div>
+
+          <!-- 备注 -->
+          <div>
+            <label for="form-notes" class="block text-sm font-medium text-slate-700 mb-1">备注</label>
+            <textarea id="form-notes" name="Notes" rows="3"
+                      class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm
+                             focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none
+                             placeholder:text-slate-400"
+                      placeholder="补充说明…"></textarea>
+          </div>
+
+          <!-- 提交按钮 -->
+          <button type="submit"
+                  class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium
+                         rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+                  id="form-submit-btn">
+            提交想法
+          </button>
+          <button type="button" id="cancel-edit-btn"
+                  class="hidden w-full py-2 px-4 text-sm font-medium text-slate-600 bg-white border border-gray-300
+                         hover:bg-gray-50 rounded-lg transition-colors"
+                  onclick="window._ideaTracker.cancelEdit()">取消编辑</button>
+        </form>
+      </div>
+    </aside>
+
+    <!-- ========== 右侧主内容区 ========== -->
+    <main class="flex-1 min-w-0 p-4 lg:p-6 space-y-6">
+
+      <!-- ===== 全局加载指示器 ===== -->
+      <div id="loading-indicator" class="flex items-center justify-center py-12">
+        <div class="spinner"></div>
+        <span class="ml-3 text-sm text-slate-500">加载中…</span>
+      </div>
+
+      <!-- ===== 模块1：遗忘度看板 ===== -->
+      <section id="dashboard-section" class="">
+        <div class="flex items-center gap-2 mb-4">
+          <!-- 火焰/警告图标 -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-orange-500">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+          </svg>
+          <h2 class="text-lg font-display font-semibold text-slate-900">遗忘度看板</h2>
+          <span id="risk-count" class="text-sm text-slate-500"></span>
+        </div>
+        <!-- 风险卡片网格 -->
+        <div id="risk-cards-grid"
+             class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <!-- 动态填充 -->
+        </div>
+        <!-- 空状态 -->
+        <!-- UI#1: 空状态情感引导 -->
+        <div id="risk-empty" class="hidden bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div class="flex flex-col items-center gap-3 py-10">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12 text-green-400">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <span class="font-medium text-slate-600">状态良好</span>
+            <span class="text-sm text-slate-400">所有想法都在健康温度范围内</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 模块2：完成度仪表盘 ===== -->
+      <section id="completion-section" class="">
+        <!-- 本周摘要 -->
+        <div id="weekly-summary" class="grid grid-cols-3 gap-3 mb-4">
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3 text-center">
+            <p id="ws-new" class="text-xl font-bold text-slate-800">0</p>
+            <p class="text-xs text-slate-400 mt-0.5">本周新增</p>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3 text-center">
+            <p id="ws-done" class="text-xl font-bold text-green-600">0</p>
+            <p class="text-xs text-slate-400 mt-0.5">本周完成</p>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3 text-center">
+            <p id="ws-checkin" class="text-xl font-bold text-blue-600">0</p>
+            <p class="text-xs text-slate-400 mt-0.5">本周打卡</p>
+          </div>
+        </div>
+        <div id="weekly-empty" class="hidden text-center py-2 mb-4">
+          <p class="text-sm text-slate-400">本周暂无活动记录</p>
+        </div>
+        <div class="flex items-center gap-2 mb-4">
+          <!-- 图表图标 -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-blue-600">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+          </svg>
+          <h2 class="text-lg font-display font-semibold text-slate-900">任务完成度仪表盘</h2>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <!-- UI#3: 统计卡片升级 — 图标 + 背景区分 -->
+          <div class="bg-slate-50 rounded-lg border border-gray-200 shadow-sm p-5 flex items-center gap-4">
+            <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-blue-600">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 8.25h-2.25A2.25 2.25 0 0 1 13.5 6V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-400 font-medium">总任务数</p>
+              <p id="stat-total" class="text-2xl font-bold text-slate-900">0</p>
+            </div>
+          </div>
+          <div class="bg-green-50/40 rounded-lg border border-green-200 shadow-sm p-5 flex items-center gap-4">
+            <div class="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-green-600">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-400 font-medium">已完成</p>
+              <p id="stat-completed" class="text-2xl font-bold text-green-700">0</p>
+            </div>
+          </div>
+          <div class="bg-blue-50/40 rounded-lg border border-blue-200 shadow-sm p-5 flex items-center gap-4">
+            <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-blue-600">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-400 font-medium">完成率</p>
+              <p id="stat-rate" class="text-2xl font-bold text-blue-700">0%</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart.js 环形图 -->
+        <div class="mt-4 bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <h3 class="text-sm font-medium text-slate-600 mb-4">各分类完成度</h3>
+          <div class="max-w-xs mx-auto">
+            <canvas id="completion-chart" width="300" height="300"></canvas>
+          </div>
+          <div id="chart-empty" class="hidden">
+            <div class="flex flex-col items-center gap-3 py-10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12 text-slate-300">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+              </svg>
+              <span class="font-medium text-slate-500">暂无数据</span>
+              <span class="text-sm text-slate-400">创建任务后图表将自动更新</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 图表#1：每周行动趋势 ===== -->
+      <section id="trend-section" class="">
+        <div class="flex items-center gap-2 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-indigo-500">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5" />
+          </svg>
+          <h2 class="text-lg font-display font-semibold text-slate-900">每周行动趋势</h2>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <div class="max-w-full">
+            <canvas id="trend-chart" height="280"></canvas>
+          </div>
+          <div id="trend-empty" class="hidden">
+            <div class="flex flex-col items-center gap-3 py-10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12 text-slate-300">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
+              </svg>
+              <span class="font-medium text-slate-500">暂无行动数据</span>
+              <span class="text-sm text-slate-400">开始打卡后，每周趋势将在此展示</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 图表#2：状态分布横向柱状图 ===== -->
+      <section id="status-dist-section" class="">
+        <div class="flex items-center gap-2 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-emerald-500">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+          <h2 class="text-lg font-display font-semibold text-slate-900">状态分布</h2>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <div class="max-w-full">
+            <canvas id="status-dist-chart" height="280"></canvas>
+          </div>
+          <div id="status-dist-empty" class="hidden">
+            <div class="flex flex-col items-center gap-3 py-10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12 text-slate-300">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+              <span class="font-medium text-slate-500">暂无想法数据</span>
+              <span class="text-sm text-slate-400">创建想法后状态分布将在此展示</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 图表#3：遗忘温度极区图 ===== -->
+      <section id="polar-section" class="">
+        <div class="flex items-center gap-2 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-rose-500">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          <h2 class="text-lg font-display font-semibold text-slate-900">遗忘温度全景</h2>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+          <div class="max-w-md mx-auto">
+            <canvas id="polar-chart" height="320"></canvas>
+          </div>
+          <div id="polar-empty" class="hidden">
+            <div class="flex flex-col items-center gap-3 py-10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12 text-slate-300">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              <span class="font-medium text-slate-500">暂无温度数据</span>
+              <span class="text-sm text-slate-400">创建想法后温度全景将在此展示</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 模块3：想法总览列表 ===== -->
+      <section id="list-section" class="">
+        <div class="flex items-center gap-2 mb-4">
+          <!-- 列表图标 -->
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-slate-600">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+          </svg>
+          <h2 class="text-lg font-display font-semibold text-slate-900">想法总览</h2>
+          <span id="list-count" class="text-sm text-slate-500"></span>
+        </div>
+
+        <!-- 筛选栏 -->
+        <div id="filter-bar" class="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <!-- 快捷筛选按钮组 -->
+          <div class="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+            <button class="filter-quick-btn px-3 py-1 text-xs font-medium rounded-md transition-colors bg-white text-slate-700 shadow-sm" data-filter="">全部</button>
+            <button class="filter-quick-btn px-3 py-1 text-xs font-medium rounded-md transition-colors text-slate-500 hover:text-slate-700" data-filter="Task">任务</button>
+            <button class="filter-quick-btn px-3 py-1 text-xs font-medium rounded-md transition-colors text-slate-500 hover:text-slate-700" data-filter="Inspiration">灵感</button>
+          </div>
+          <!-- 搜索 -->
+          <input type="text" id="filter-search" placeholder="搜索标题…"
+                 class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg shadow-sm bg-white w-full sm:w-48
+                        focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none placeholder:text-slate-400">
+          <!-- 类型筛选 -->
+          <select id="filter-type"
+                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg shadow-sm bg-white
+                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+            <option value="">全部类型</option>
+            <option value="Task">任务</option>
+            <option value="Inspiration">灵感</option>
+          </select>
+
+          <!-- 分类筛选 -->
+          <select id="filter-category"
+                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg shadow-sm bg-white
+                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+            <option value="">全部分类</option>
+            <option value="工作">工作</option>
+            <option value="生活">生活</option>
+            <option value="学习">学习</option>
+          </select>
+
+          <!-- 状态筛选 -->
+          <select id="filter-status"
+                  class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg shadow-sm bg-white
+                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+            <option value="">全部状态</option>
+            <option value="念头">念头</option>
+            <option value="已计划">已计划</option>
+            <option value="执行中">执行中</option>
+            <option value="已完成">已完成</option>
+            <option value="已放弃">已放弃</option>
+            <option value="待探索">待探索</option>
+            <option value="已探索">已探索</option>
+          </select>
+
+          <!-- 清除筛选 -->
+          <button id="filter-clear"
+                  class="px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 hover:bg-gray-100 rounded-lg transition-colors">
+            清除筛选
+          </button>
+          <button id="select-mode-btn"
+                  class="px-3 py-1.5 text-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-gray-200">
+            ☐ 多选
+          </button>
+        </div>
+
+        <!-- 表格容器 -->
+        <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+          <table class="w-full text-sm" id="ideas-table">
+            <colgroup>
+              <col class="select-col" span="1">
+              <col span="1"><col span="1"><col span="1"><col span="1"><col span="1"><col span="1">
+            </colgroup>
+            <thead class="bg-slate-50 border-b border-gray-200 sticky top-0 z-10">
+              <tr>
+                <th class="select-col px-3 py-3 w-8"><input type="checkbox" id="select-all-cb" class="rounded"></th>
+                <th class="text-left px-4 py-3 font-medium text-slate-600 whitespace-nowrap cursor-pointer hover:text-slate-900 select-none" data-sort="title">标题 ⇅</th>
+                <th class="text-left px-4 py-3 font-medium text-slate-600 whitespace-nowrap">类型</th>
+                <th class="text-left px-4 py-3 font-medium text-slate-600 whitespace-nowrap">分类</th>
+                <th class="text-left px-4 py-3 font-medium text-slate-600 whitespace-nowrap cursor-pointer hover:text-slate-900 select-none" data-sort="status">状态 ⇅</th>
+                <th class="text-center px-4 py-3 font-medium text-slate-600 whitespace-nowrap cursor-pointer hover:text-slate-900 select-none" data-sort="temp">遗忘指数 ⇅</th>
+                <th class="text-center px-4 py-3 font-medium text-slate-600 whitespace-nowrap">操作</th>
+              </tr>
+            </thead>
+            <tbody id="ideas-tbody">
+              <!-- 动态填充 -->
+            </tbody>
+          </table>
+          <!-- 列表空状态 -->
+          <!-- UI#1: 空状态情感引导 -->
+          <div id="list-empty" class="hidden">
+            <div class="flex flex-col items-center gap-3 py-12">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12 text-slate-300">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m6 4.125 2.25 2.25m0 0 2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+              </svg>
+              <span class="font-medium text-slate-500">暂无想法</span>
+              <span class="text-sm text-slate-400">在左侧表单中创建你的第一条想法吧</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ========== 快速灵感 FAB + 模态框（修复#4） ========== -->
+  <button id="quick-inspire-fab"
+          class="fixed bottom-6 right-24 w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600
+                 text-white rounded-full shadow-lg flex items-center justify-center z-30 transition-all duration-200 hover:scale-110"
+          aria-label="快速捕捉灵感" title="快速捕捉灵感">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.25a12.06 12.06 0 0 1-4.5 0" />
+    </svg>
+  </button>
+
+  <!-- 快速灵感模态框 -->
+  <div id="quick-inspire-modal" class="fixed inset-0 z-[9999] hidden flex items-center justify-center bg-black/40" aria-hidden="true">
+    <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm mx-4 transform transition-all">
+      <h3 class="text-lg font-display font-semibold text-slate-900 mb-4">💡 快速捕捉灵感</h3>
+      <input type="text" id="quick-inspire-title" placeholder="灵感标题…"
+             class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none mb-3">
+      <div class="flex flex-wrap gap-2 mb-4" id="quick-inspire-categories">
+        <label class="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-full cursor-pointer hover:border-amber-400 text-sm has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50"><input type="checkbox" value="工作" class="sr-only">工作</label>
+        <label class="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-full cursor-pointer hover:border-amber-400 text-sm has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50"><input type="checkbox" value="生活" class="sr-only">生活</label>
+        <label class="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-full cursor-pointer hover:border-amber-400 text-sm has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50"><input type="checkbox" value="学习" class="sr-only">学习</label>
+      </div>
+      <div class="flex gap-3">
+        <button id="quick-inspire-cancel" class="flex-1 py-2 text-sm text-slate-600 hover:bg-gray-100 rounded-lg transition-colors">取消</button>
+        <button id="quick-inspire-submit" class="flex-1 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors">捕捉灵感</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 移动端 FAB（悬浮添加按钮） ========== -->
+  <button id="mobile-fab"
+          class="lg:hidden fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+                 text-white rounded-full shadow-lg flex items-center justify-center z-30 transition-colors
+                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          aria-label="添加新想法">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-7 h-7">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+  </button>
+
+  <!-- ==================== 所有 JavaScript 逻辑 ==================== -->
+  <script>
+  (function () {
+    // ============================================================
+    // 0. Airtable 配置
+    // ============================================================
+    const AIRTABLE_BASE_ID = 'appN4IYCeu23ZCmuu';
+    const AIRTABLE_API_TOKEN = 'patKqsOHHgkp6Yfv7.63fb14f672aa8d0d734dce9e4be9d46871a0b808a6f97190e482986c2bfc4ba7';
+    const AIRTABLE_TABLE_IDEAS = 'Ideas';
+    const AIRTABLE_TABLE_ACTIVITY = 'ActivityLog';
+    const AIRTABLE_API_URL = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}`;
+
+    /**
+     * 通用 Airtable 请求头
+     */
+    function getHeaders() {
+      return {
+        'Authorization': `Bearer ${AIRTABLE_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      };
+    }
+
+    // ============================================================
+    // 1. 全局状态
+    // ============================================================
+    let allIdeas = [];          // 所有想法记录（Airtable 原始数据）
+    const chartInstances = {};  // 图表#1-#3: 多个 Chart.js 实例引用
+    const pendingCheckins = new Set(); // 修复 #1/#4：防止打卡重复提交
+    const lastActiveStatus = new Map(); // 修复#1：保存完成/放弃前的原状态用于重开恢复
+
+    // ============================================================
+    // 2. DOM 元素引用缓存
+    // ============================================================
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    const dom = {
+      // 侧边栏
+      sidebar: $('#sidebar'),
+      sidebarOverlay: $('#sidebar-overlay'),
+      menuToggle: $('#menu-toggle'),
+      sidebarClose: $('#sidebar-close'),
+      mobileFab: $('#mobile-fab'),
+
+      // 表单
+      ideaForm: $('#idea-form'),
+      formSubmitBtn: $('#form-submit-btn'),
+
+      // 加载
+      loading: $('#loading-indicator'),
+
+      // 仪表盘
+      dashboardSection: $('#dashboard-section'),
+      riskCardsGrid: $('#risk-cards-grid'),
+      riskEmpty: $('#risk-empty'),
+      riskCount: $('#risk-count'),
+
+      // 完成度
+      completionSection: $('#completion-section'),
+      statTotal: $('#stat-total'),
+      statCompleted: $('#stat-completed'),
+      statRate: $('#stat-rate'),
+      chartCanvas: $('#completion-chart'),
+      chartEmpty: $('#chart-empty'),
+
+      // 新图表
+      trendSection: $('#trend-section'),
+      trendCanvas: $('#trend-chart'),
+      trendEmpty: $('#trend-empty'),
+      statusDistSection: $('#status-dist-section'),
+      statusDistCanvas: $('#status-dist-chart'),
+      statusDistEmpty: $('#status-dist-empty'),
+      polarSection: $('#polar-section'),
+      polarCanvas: $('#polar-chart'),
+      polarEmpty: $('#polar-empty'),
+
+      // 列表
+      listSection: $('#list-section'),
+      ideasTbody: $('#ideas-tbody'),
+      listEmpty: $('#list-empty'),
+      listCount: $('#list-count'),
+      filterSearch: $('#filter-search'),
+      filterType: $('#filter-type'),
+      filterCategory: $('#filter-category'),
+      filterStatus: $('#filter-status'),
+      filterClear: $('#filter-clear'),
+
+      // 其他
+      refreshBtn: $('#refresh-btn'),
+      toastContainer: $('#toast-container'),
+    };
+
+    // ============================================================
+    // 3. Toast 通知系统
+    // ============================================================
+    /**
+     * 显示临时通知
+     * @param {string} message - 通知内容
+     * @param {'success'|'error'|'info'} type - 类型
+     */
+    function showToast(message, type = 'success') {
+      const colors = {
+        success: { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-800', icon: 'text-green-500', bar: 'bg-green-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />' },
+        error:   { bg: 'bg-red-50', border: 'border-red-300', text: 'text-red-800', icon: 'text-red-500', bar: 'bg-red-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />' },
+        info:    { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800', icon: 'text-blue-500', bar: 'bg-blue-500', svg: '<path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />' },
+      };
+      const c = colors[type] || colors.info;
+
+      const toast = document.createElement('div');
+      toast.className = `toast-enter relative overflow-hidden flex items-start gap-3 px-4 py-3 rounded-lg border shadow-md text-sm font-medium ${c.bg} ${c.border} ${c.text}`;
+      toast.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 shrink-0 mt-0.5 ${c.icon}">${c.svg}</svg>
+        <span class="flex-1">${escapeHtml(message)}</span>
+        <button class="ml-2 text-current opacity-50 hover:opacity-100 transition-opacity shrink-0" aria-label="关闭">&times;</button>
+        <div class="toast-timer-bar absolute bottom-0 left-0 h-1 ${c.bar} rounded-b-lg"></div>
+      `;
+      toast.querySelector('button').addEventListener('click', () => dismiss(toast));
+      dom.toastContainer.appendChild(toast);
+
+      // 3.5 秒后自动消失
+      const timer = setTimeout(() => dismiss(toast), 3500);
+      toast._dismissTimer = timer;
+    }
+
+    function dismiss(toast) {
+      if (toast._dismissed) return;
+      toast._dismissed = true;
+      clearTimeout(toast._dismissTimer);
+      toast.classList.remove('toast-enter');
+      toast.classList.add('toast-exit');
+      toast.addEventListener('animationend', () => toast.remove(), { once: true });
+    }
+
+    /** HTML 转义工具 */
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // ============================================================
+    // 4. 侧边栏控制（移动端）
+    // ============================================================
+    function openSidebar() {
+      dom.sidebar.classList.add('active');
+      dom.sidebarOverlay.classList.add('active');
+      document.body.classList.add('sidebar-locked'); // 修复 #6：iOS 滚动锁定
+    }
+
+    function closeSidebar() {
+      dom.sidebar.classList.remove('active');
+      dom.sidebarOverlay.classList.remove('active');
+      document.body.classList.remove('sidebar-locked');
+    }
+
+    dom.menuToggle.addEventListener('click', openSidebar);
+    dom.sidebarClose.addEventListener('click', closeSidebar);
+    dom.sidebarOverlay.addEventListener('click', closeSidebar);
+    dom.mobileFab.addEventListener('click', () => {
+      openSidebar();
+    });
+
+    // 灵感模式联动：隐藏任务专属字段
+    const typeRadios = document.querySelectorAll('input[name="Type"]');
+    typeRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        const isInspiration = radio.value === 'Inspiration';
+        document.querySelectorAll('.task-only-option').forEach(o => o.hidden = isInspiration);
+        const deadlineField = document.getElementById('deadline-field');
+        if (deadlineField) deadlineField.style.display = isInspiration ? 'none' : '';
+        // 如果当前选中了被隐藏的选项，重置为"待探索"
+        if (isInspiration) {
+          const statusSelect = document.getElementById('form-status');
+          const hiddenValues = ['执行中', '已完成', '已放弃'];
+          if (hiddenValues.includes(statusSelect.value)) statusSelect.value = '待探索';
+        }
+      });
+    });
+
+    // 桌面端侧边栏折叠
+    const collapseBtn = document.getElementById('sidebar-collapse-btn');
+    if (collapseBtn) {
+      collapseBtn.classList.remove('sidebar-expanded-only');
+      collapseBtn.addEventListener('click', () => {
+        dom.sidebar.classList.toggle('sidebar-collapsed');
+        const c = dom.sidebar.classList.contains('sidebar-collapsed');
+        collapseBtn.innerHTML = c ? '&rarr;' : '&larr;';
+        collapseBtn.title = c ? '展开' : '折叠';
+      });
+    }
+
+    // ============================================================
+    // 5. Airtable API 函数
+    // ============================================================
+
+    /**
+     * 获取 Ideas 表所有记录
+     * @returns {Promise<Array>} Airtable records
+     */
+    async function fetchIdeas() {
+      // 修复 #2：循环处理 Airtable 分页，确保获取全部记录
+      let allRecords = [];
+      let offset = null;
+
+      do {
+        const params = new URLSearchParams({ maxRecords: '200' });
+        if (offset) params.set('offset', offset);
+        const url = `${AIRTABLE_API_URL}/${AIRTABLE_TABLE_IDEAS}?${params.toString()}`;
+        const response = await fetch(url, { headers: getHeaders() });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.error?.message || `请求失败 (${response.status})`);
+        }
+
+        const data = await response.json();
+        allRecords = allRecords.concat(data.records || []);
+        offset = data.offset;
+      } while (offset);
+
+      return allRecords;
+    }
+
+    /**
+     * 创建新想法
+     * @param {Object} fields - Airtable fields 对象
+     * @returns {Promise<Object>} 创建的记录
+     */
+    async function createIdea(fields) {
+      const url = `${AIRTABLE_API_URL}/${AIRTABLE_TABLE_IDEAS}`;
+      const body = JSON.stringify({ records: [{ fields }] });
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: getHeaders(),
+        body,
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || `创建失败 (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data.records[0];
+    }
+
+    /**
+     * 更新想法（用于打卡等操作）
+     * @param {string} recordId - Airtable record ID
+     * @param {Object} fields - 要更新的字段
+     * @returns {Promise<Object>} 更新后的记录
+     */
+    async function updateIdea(recordId, fields) {
+      const url = `${AIRTABLE_API_URL}/${AIRTABLE_TABLE_IDEAS}/${recordId}`;
+      const body = JSON.stringify({ fields });
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body,
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || `更新失败 (${response.status})`);
+      }
+
+      const data = await response.json();
+      return data;
+    }
+
+    /**
+     * 删除想法
+     */
+    async function deleteIdeaApi(recordId) {
+      const url = `${AIRTABLE_API_URL}/${AIRTABLE_TABLE_IDEAS}/${recordId}`;
+      const response = await fetch(url, { method: 'DELETE', headers: getHeaders() });
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error?.message || `删除失败 (${response.status})`);
+      }
+      return response.json();
+    }
+
+    /**
+     * 【未来扩展用】预留 ActivityLog 表写入接口，当前版本不实现 UI
+     * @param {string} ideaId - 关联的想法 ID
+     * @param {string} note - 活动备注
+     */
+    async function addActivityLog(ideaId, note) {
+      // 未来扩展：向 ActivityLog 表写入活动记录
+      // const url = `${AIRTABLE_API_URL}/${AIRTABLE_TABLE_ACTIVITY}`;
+      // const body = JSON.stringify({ records: [{ fields: { IdeaId: ideaId, Note: note, Timestamp: new Date().toISOString() } }] });
+      // await fetch(url, { method: 'POST', headers: getHeaders(), body });
+      console.log('[预留] addActivityLog 被调用，当前未实现:', { ideaId, note });
+    }
+
+    // ============================================================
+    // 6. 核心算法：遗忘温度指数
+    // ============================================================
+
+    /**
+     * 修复 #3：将 YYYY-MM-DD 字符串按 UTC 解析，避免跨浏览器时区差异
+     * @param {string} dateStr - "YYYY-MM-DD" 格式
+     * @returns {number} 距今天数
+     */
+    function daysFromUTC(dateStr) {
+      const parts = dateStr.split('-');
+      const utcDate = new Date(Date.UTC(
+        parseInt(parts[0], 10),
+        parseInt(parts[1], 10) - 1,
+        parseInt(parts[2], 10)
+      ));
+      return Math.floor((Date.now() - utcDate.getTime()) / (1000 * 60 * 60 * 24));
+    }
+
+    /**
+     * 计算遗忘温度分数
+     *
+     * 公式：分数 = 基础热度(60) – 冷却(距今天数 × 2) + 行动加热(每次行动+15)
+     * 分数上限 100，下限 0
+     * 已完成 / 已放弃 的任务分数锁定为 100
+     *
+     * @param {Object} record - Airtable record 对象
+     * @returns {number} 0-100 的温度分数
+     */
+    function calculateTemperature(record) {
+      const fields = record.fields || {};
+      const status = fields.Status;
+
+      // 已完成 / 已放弃：分数锁定 100（健康，不会遗忘）
+      if (status === '已完成' || status === '已放弃') {
+        return 100;
+      }
+
+      const actionCount = typeof fields.ActionCount === 'number' ? fields.ActionCount : 0;
+
+      // 计算距今天数（优先使用 LastActionDate，其次用 createdTime）
+      // 修复 #3：使用 UTC 解析避免 Safari/Firefox 时区差异
+      let daysSince;
+      if (fields.LastActionDate) {
+        daysSince = daysFromUTC(fields.LastActionDate);
+      } else if (record.createdTime) {
+        const created = new Date(record.createdTime);
+        daysSince = Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
+      } else {
+        daysSince = 30; // 兜底值
+      }
+
+      // 温度公式
+      let score = 60 - daysSince * 2 + actionCount * 15;
+
+      // 夹在 [0, 100]
+      return Math.min(Math.max(Math.round(score), 0), 100);
+    }
+
+    /**
+     * 根据温度分数返回风险等级
+     * @param {number} score
+     * @returns {{ level: string, color: string, bgColor: string, textColor: string }}
+     */
+    function getRiskLevel(score) {
+      if (score < 30) {
+        return { level: '高风险', color: '#ef4444', bgColor: 'bg-red-100', textColor: 'text-red-700', barColor: 'bg-red-500' };
+      }
+      if (score <= 50) {
+        return { level: '中风险', color: '#f97316', bgColor: 'bg-orange-100', textColor: 'text-orange-700', barColor: 'bg-orange-500' };
+      }
+      return { level: '健康', color: '#22c55e', bgColor: 'bg-green-100', textColor: 'text-green-700', barColor: 'bg-green-500' };
+    }
+
+    // ============================================================
+    // 7. 数据处理：为每条记录附加计算字段
+    // ============================================================
+    function enrichIdeas(records) {
+      return records.map(record => {
+        const temp = calculateTemperature(record);
+        const risk = getRiskLevel(temp);
+        const f = record.fields || {};
+        // 修复#3：逾期判断
+        const overdue = f.Deadline && f.Status !== '已完成' && f.Status !== '已放弃' && new Date(f.Deadline + 'T23:59:59Z') < new Date();
+        return { ...record, _temperature: temp, _risk: risk, _overdue: overdue };
+      });
+    }
+
+    // ============================================================
+    // 8. UI 渲染：遗忘度看板
+    // ============================================================
+    function renderDashboard(ideas) {
+      // 筛选出中高风险项（温度 < 50）且未完成/未放弃的
+      const riskyIdeas = ideas.filter(i => {
+        const status = i.fields?.Status;
+        // 已完成和已放弃的分数是 100，自动被排除
+        return i._temperature < 50 || status === '念头' || status === '待探索';
+      });
+
+      // 按温度从低到高排序（最危险的排最前）
+      riskyIdeas.sort((a, b) => a._temperature - b._temperature);
+
+      dom.riskCount.textContent = riskyIdeas.length > 0 ? `(${riskyIdeas.length} 项需关注)` : '';
+
+      if (riskyIdeas.length === 0) {
+        dom.riskCardsGrid.innerHTML = '';
+        dom.riskEmpty.classList.remove('hidden');
+      } else {
+        dom.riskEmpty.classList.add('hidden');
+        dom.riskCardsGrid.innerHTML = riskyIdeas.map(idea => {
+          const f = idea.fields || {};
+          const title = f.Title || '(无标题)';
+          const typeLabel = f.Type === 'Inspiration' ? '💡 灵感' : '📋 任务';
+          const categories = Array.isArray(f.Category) ? f.Category.join(' · ') : '';
+          const score = idea._temperature;
+          const risk = idea._risk;
+
+          return `
+            <div class="bg-white rounded-lg border ${score < 30 ? 'border-red-200' : 'border-orange-200'} shadow-sm p-4 flex flex-col gap-3 transition-all duration-200 hover:-translate-y-1 hover:shadow-md">
+              <!-- 标题行 -->
+              <div class="flex items-start justify-between gap-2">
+                <h3 class="font-medium text-slate-900 text-sm leading-snug line-clamp-2" title="${escapeHtml(title)}">
+                  ${escapeHtml(title)}
+                </h3>
+                <span class="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${risk.bgColor} ${risk.textColor}">
+                  ${risk.level}
+                </span>
+                ${idea._overdue ? '<span class="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">⏰ 已逾期</span>' : ''}
+              </div>
+
+              <!-- 元信息 -->
+              <div class="flex items-center gap-2 text-xs text-slate-500">
+                <span>${typeLabel}</span>
+                ${categories ? `<span>·</span><span>${escapeHtml(categories)}</span>` : ''}
+              </div>
+
+              <!-- 温度进度条 -->
+              <div class="space-y-1">
+                <div class="flex justify-between text-xs text-slate-500">
+                  <span>遗忘温度</span>
+                  <span class="font-semibold" style="color: ${risk.color}">${score}°</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div class="progress-fill h-2 rounded-full ${risk.barColor}" style="width: ${score}%"></div>
+                </div>
+              </div>
+
+              <!-- 操作按钮组 -->
+              <div class="flex gap-2">
+                ${f.Status !== '已完成' && f.Status !== '已放弃' ? `
+                <button onclick="window._ideaTracker.markComplete('${idea.id}')"
+                        class="btn-press flex-1 flex items-center justify-center gap-1 py-2 text-sm font-medium text-green-600 bg-green-50
+                               hover:bg-green-600 hover:text-white rounded-lg transition-all duration-150 border border-green-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg> 完成
+                </button>` : `
+                <button onclick="window._ideaTracker.markReopen('${idea.id}')"
+                        class="btn-press flex-1 flex items-center justify-center gap-1 py-2 text-sm font-medium text-gray-500 bg-gray-100
+                               hover:bg-gray-200 rounded-lg transition-all duration-150 border border-gray-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" /></svg> 重开
+                </button>`}
+                ${f.Status !== '已完成' && f.Status !== '已放弃' ? `
+                <button onclick="window._ideaTracker.doCheckin('${idea.id}')"
+                        class="btn-press flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium text-blue-600 bg-blue-50
+                               hover:bg-blue-600 hover:text-white rounded-lg transition-all duration-150 border border-blue-200">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg> +1
+                </button>` : ''}
+                <button onclick="window._ideaTracker.startEdit('${idea.id}')" class="btn-press inline-flex items-center justify-center w-8 h-8 text-slate-400 hover:text-blue-600 border border-gray-200 rounded-lg transition-colors" title="编辑">✎</button>
+                <button onclick="window._ideaTracker.deleteIdea('${idea.id}')" class="btn-press inline-flex items-center justify-center w-8 h-8 text-slate-400 hover:text-red-500 border border-gray-200 rounded-lg transition-colors" title="删除">✕</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      dom.dashboardSection.classList.remove('hidden');
+    }
+
+    // ============================================================
+    // 9b. 本周摘要
+    // ============================================================
+    function renderWeeklySummary(ideas) {
+      const now = new Date(); const day = now.getDay(); const monday = new Date(now); monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1)); monday.setHours(0,0,0,0);
+      const weekStart = monday.toISOString().split('T')[0];
+      let newCount = 0, doneCount = 0, checkinCount = 0;
+      ideas.forEach(idea => {
+        const f = idea.fields || {};
+        if (idea.createdTime && idea.createdTime >= weekStart + 'T00:00:00.000Z') newCount++;
+        if (f.LastActionDate && f.LastActionDate >= weekStart) {
+          checkinCount++;
+          if (f.Status === '已完成') doneCount++;
+        }
+      });
+      const total = newCount + doneCount + checkinCount;
+      document.getElementById('ws-new').textContent = newCount;
+      document.getElementById('ws-done').textContent = doneCount;
+      document.getElementById('ws-checkin').textContent = checkinCount;
+      document.getElementById('weekly-summary').classList.toggle('hidden', total === 0);
+      document.getElementById('weekly-empty').classList.toggle('hidden', total > 0);
+    }
+
+    // ============================================================
+    function renderCompletionChart(ideas) {
+      // 仅统计 Type = "Task" 的想法
+      const tasks = ideas.filter(i => i.fields?.Type === 'Task');
+
+      if (tasks.length === 0) {
+        dom.statTotal.textContent = '0';
+        dom.statCompleted.textContent = '0';
+        dom.statRate.textContent = '0%';
+        dom.chartCanvas.parentElement.classList.add('hidden');
+        dom.chartEmpty.classList.remove('hidden');
+        dom.completionSection.classList.remove('hidden');
+        return;
+      }
+
+      const totalTasks = tasks.length;
+      const completedTasks = tasks.filter(i => i.fields?.Status === '已完成').length;
+      const rate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+      dom.statTotal.textContent = totalTasks;
+      dom.statCompleted.textContent = completedTasks;
+      dom.statRate.textContent = `${rate}%`;
+
+      // 按分类统计完成数
+      const categories = ['工作', '生活', '学习'];
+      const categoryCompleted = {};
+      categories.forEach(cat => {
+        categoryCompleted[cat] = tasks.filter(t =>
+          t.fields?.Status === '已完成' &&
+          Array.isArray(t.fields?.Category) &&
+          t.fields.Category.includes(cat)
+        ).length;
+      });
+
+      // 过滤掉完成数为 0 的分类（让图表更清晰）
+      const labels = categories.filter(cat => categoryCompleted[cat] > 0);
+      const dataValues = labels.map(cat => categoryCompleted[cat]);
+
+      if (labels.length === 0) {
+        dom.chartCanvas.parentElement.classList.add('hidden');
+        dom.chartEmpty.classList.remove('hidden');
+        // 修复 #10：安全访问 <p> 子元素，避免空指针
+        const emptyMsg = dom.chartEmpty.querySelector('p');
+        if (emptyMsg) emptyMsg.textContent = '各分类暂未完成任务';
+        dom.completionSection.classList.remove('hidden');
+        return;
+      }
+
+      dom.chartCanvas.parentElement.classList.remove('hidden');
+      dom.chartEmpty.classList.add('hidden');
+
+      // 销毁旧图表
+      if (chartInstances.completion) {
+        chartInstances.completion.destroy();
+        chartInstances.completion = null;
+      }
+
+      // 创建环形图
+      const ctx = dom.chartCanvas.getContext('2d');
+      chartInstances.completion = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: dataValues,
+            backgroundColor: ['#3b82f6', '#f59e0b', '#10b981'], // 蓝、橙、绿对应工作/生活/学习
+            borderColor: '#ffffff',
+            borderWidth: 2,
+            hoverBorderWidth: 3,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          cutout: '65%',
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                padding: 16,
+                usePointStyle: true,
+                pointStyleWidth: 10,
+                font: { family: 'Inter', size: 12 },
+              },
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return ` ${ctx.label}: ${ctx.parsed} 个已完成`;
+                },
+              },
+            },
+          },
+        },
+      });
+
+      dom.completionSection.classList.remove('hidden');
+    }
+
+    let sortKey = 'temp'; // 默认按温度排序
+    let sortDir = 1; // 1=升序, -1=降序
+    let currentFiltered = [];
+
+    function updateFilterSort() {
+      // 持久化筛选状态
+      localStorage.setItem('idea-filter-type', dom.filterType.value);
+      localStorage.setItem('idea-filter-category', dom.filterCategory.value);
+      localStorage.setItem('idea-filter-status', dom.filterStatus.value);
+      localStorage.setItem('idea-filter-search', dom.filterSearch.value);
+      localStorage.setItem('idea-sort-key', sortKey);
+      localStorage.setItem('idea-sort-dir', sortDir);
+      renderList(allIdeas);
+    }
+
+    function restoreFilters() {
+      dom.filterType.value = localStorage.getItem('idea-filter-type') || '';
+      dom.filterCategory.value = localStorage.getItem('idea-filter-category') || '';
+      dom.filterStatus.value = localStorage.getItem('idea-filter-status') || '';
+      dom.filterSearch.value = localStorage.getItem('idea-filter-search') || '';
+      sortKey = localStorage.getItem('idea-sort-key') || 'temp';
+      sortDir = parseInt(localStorage.getItem('idea-sort-dir') || '1');
+    }
+
+    // ============================================================
+    function renderList(ideas) {
+      const filterType = dom.filterType.value;
+      const filterCategory = dom.filterCategory.value;
+      const filterStatus = dom.filterStatus.value;
+      const searchText = dom.filterSearch.value.toLowerCase().trim();
+
+      let filtered = [...ideas];
+
+      if (filterType) filtered = filtered.filter(i => i.fields?.Type === filterType);
+      if (filterCategory) filtered = filtered.filter(i => Array.isArray(i.fields?.Category) && i.fields.Category.includes(filterCategory));
+      if (filterStatus) filtered = filtered.filter(i => i.fields?.Status === filterStatus);
+      if (searchText) filtered = filtered.filter(i => (i.fields?.Title || '').toLowerCase().includes(searchText));
+
+      // 排序
+      filtered.sort((a, b) => {
+        let va, vb;
+        if (sortKey === 'title') { va = (a.fields?.Title || ''); vb = (b.fields?.Title || ''); return sortDir * va.localeCompare(vb); }
+        if (sortKey === 'status') { va = (a.fields?.Status || ''); vb = (b.fields?.Status || ''); return sortDir * va.localeCompare(vb); }
+        if (sortKey === 'temp') return sortDir * (a._temperature - b._temperature);
+        return 0;
+      });
+
+      dom.listCount.textContent = `(${filtered.length} 条)`;
+
+      if (filtered.length === 0) {
+        dom.ideasTbody.innerHTML = '';
+        dom.listEmpty.classList.remove('hidden');
+        // 修复 #7：区分"无数据"和"筛选无结果"
+        const hasAnyFilter = filterType || filterCategory || filterStatus;
+        const emptyMsg = dom.listEmpty.querySelector('span.font-medium');
+        if (emptyMsg) {
+          emptyMsg.textContent = hasAnyFilter
+            ? '没有符合筛选条件的想法'
+            : '暂无想法';
+        }
+      } else {
+        dom.listEmpty.classList.add('hidden');
+        dom.ideasTbody.innerHTML = filtered.map((idea, index) => {
+          const f = idea.fields || {};
+          const title = f.Title || '(无标题)';
+          const typeLabel = f.Type === 'Inspiration' ? '💡 灵感' : '📋 任务';
+          const categories = Array.isArray(f.Category) ? f.Category : [];
+          const status = f.Status || '念头';
+          const score = idea._temperature;
+          const risk = idea._risk;
+
+          // 分类彩色 pill
+          const categoryColors = { '工作': 'bg-blue-100 text-blue-700', '生活': 'bg-orange-100 text-orange-700', '学习': 'bg-green-100 text-green-700' };
+          const categoryPills = categories.map(c =>
+            `<span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${categoryColors[c] || 'bg-gray-100 text-gray-600'}">${escapeHtml(c)}</span>`
+          ).join(' ') || '<span class="text-xs text-slate-400">—</span>';
+
+          // 状态标签颜色
+          const statusColors = {
+            '念头':   'bg-gray-100 text-gray-700',
+            '已计划': 'bg-blue-100 text-blue-700',
+            '执行中': 'bg-yellow-100 text-yellow-700',
+            '已完成': 'bg-green-100 text-green-700',
+            '已放弃': 'bg-slate-200 text-slate-500',
+            '待探索': 'bg-purple-100 text-purple-700',
+            '已探索': 'bg-teal-100 text-teal-700',
+          };
+
+          // 风险边框 + 斑马纹
+          const riskBorderClass = score < 30 ? 'row-risk-high' : (score <= 50 ? 'row-risk-medium' : 'row-risk-healthy');
+          const zebraClass = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+
+          return `
+            <tr class="border-b border-gray-100 hover:bg-gray-100 transition-colors ${zebraClass} ${riskBorderClass}">
+              <td class="select-col px-3 py-3"><input type="checkbox" class="row-cb rounded" data-id="${idea.id}"></td>
+              <td class="px-4 py-3">
+                <span class="font-medium text-slate-900 line-clamp-1" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+                ${f.Notes ? `<p class="text-xs text-slate-400 mt-0.5 line-clamp-1">${escapeHtml(f.Notes)}</p>` : ''}
+              </td>
+              <td class="px-4 py-3 text-slate-600 whitespace-nowrap">${typeLabel}</td>
+              <td class="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">${categoryPills}</td>
+              <td class="px-4 py-3 whitespace-nowrap">
+                <span class="text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[status] || 'bg-gray-100 text-gray-700'}">
+                  ${status}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-center whitespace-nowrap">
+                <div class="flex items-center justify-center gap-2">
+                  <div class="w-16 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                    <div class="progress-fill h-1.5 rounded-full ${risk.barColor}" style="width: ${score}%"></div>
+                  </div>
+                  <span class="text-xs font-semibold" style="color: ${risk.color}">${score}°</span>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-center whitespace-nowrap">
+                <div class="flex items-center justify-center gap-1">
+                  ${status !== '已完成' && status !== '已放弃' ? `
+                  <button onclick="window._ideaTracker.markComplete('${idea.id}')"
+                          class="btn-press inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-600 bg-green-50
+                                 hover:bg-green-600 hover:text-white rounded-lg transition-all duration-150 border border-green-200"
+                          title="标记完成">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                  </button>
+                  ` : `
+                  <button onclick="window._ideaTracker.markReopen('${idea.id}')"
+                          class="btn-press inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 bg-gray-100
+                                 hover:bg-gray-200 rounded-lg transition-all duration-150 border border-gray-200"
+                          title="重新打开">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
+                    </svg>
+                  </button>
+                  `}
+                  ${status !== '已完成' && status !== '已放弃' ? `
+                  <button onclick="window._ideaTracker.doCheckin('${idea.id}')"
+                          class="btn-press inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-600 bg-blue-50
+                                 hover:bg-blue-600 hover:text-white rounded-lg transition-all duration-150 border border-blue-200"
+                          title="行动打卡">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    +1
+                  </button>
+                  ` : ''}
+                  <button onclick="window._ideaTracker.startEdit('${idea.id}')" class="inline-flex items-center justify-center w-6 h-6 text-slate-400 hover:text-blue-600 rounded transition-colors" title="编辑">✎</button>
+                  <button onclick="window._ideaTracker.deleteIdea('${idea.id}')" class="inline-flex items-center justify-center w-6 h-6 text-slate-400 hover:text-red-500 rounded transition-colors" title="删除">✕</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      dom.listSection.classList.remove('hidden');
+    }
+
+    // ============================================================
+    // 10b. 图表#1：每周行动趋势（柱状图）
+    // ============================================================
+    function renderTrendChart(ideas) {
+      const now = new Date();
+      const weeks = [];
+      for (let i = 7; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i * 7);
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - d.getDay() + 1);
+        weeks.push({ label: `${monday.getMonth() + 1}/${monday.getDate()}`, start: monday });
+      }
+
+      const weeklyCounts = weeks.map(w => {
+        const end = new Date(w.start);
+        end.setDate(end.getDate() + 7);
+        return ideas.filter(i => {
+          const d = i.fields?.LastActionDate;
+          if (!d) return false;
+          const ad = new Date(d + 'T00:00:00Z');
+          return ad >= w.start && ad < end;
+        }).length;
+      });
+
+      const hasData = weeklyCounts.some(c => c > 0);
+      if (!hasData && ideas.length === 0) {
+        dom.trendCanvas.parentElement.classList.add('hidden');
+        dom.trendEmpty.classList.remove('hidden');
+        dom.trendSection.classList.remove('hidden');
+        return;
+      }
+
+      dom.trendCanvas.parentElement.classList.remove('hidden');
+      dom.trendEmpty.classList.add('hidden');
+
+      if (chartInstances.trend) { chartInstances.trend.destroy(); chartInstances.trend = null; }
+      const ctx = dom.trendCanvas.getContext('2d');
+      chartInstances.trend = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: weeks.map(w => w.label),
+          datasets: [{
+            label: '打卡次数',
+            data: weeklyCounts,
+            backgroundColor: '#6366f1',
+            borderRadius: 6,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1, font: { family: 'Inter', size: 11 } }, grid: { color: '#f1f5f9' } },
+            x: { ticks: { font: { family: 'Inter', size: 10 } }, grid: { display: false } },
+          },
+        },
+      });
+      dom.trendSection.classList.remove('hidden');
+    }
+
+    // ============================================================
+    // 10c. 图表#2：状态分布（横向柱状图）
+    // ============================================================
+    function renderStatusDistChart(ideas) {
+      if (ideas.length === 0) {
+        dom.statusDistCanvas.parentElement.classList.add('hidden');
+        dom.statusDistEmpty.classList.remove('hidden');
+        dom.statusDistSection.classList.remove('hidden');
+        return;
+      }
+
+      const statuses = ['念头', '已计划', '执行中', '已完成', '已放弃', '待探索', '已探索'];
+      const statusColors = ['#94a3b8', '#3b82f6', '#eab308', '#22c55e', '#cbd5e1', '#a855f7', '#14b8a6'];
+      const counts = statuses.map(s => ideas.filter(i => i.fields?.Status === s).length);
+      const hasData = counts.some(c => c > 0);
+
+      if (!hasData) {
+        dom.statusDistCanvas.parentElement.classList.add('hidden');
+        dom.statusDistEmpty.classList.remove('hidden');
+        dom.statusDistSection.classList.remove('hidden');
+        return;
+      }
+
+      dom.statusDistCanvas.parentElement.classList.remove('hidden');
+      dom.statusDistEmpty.classList.add('hidden');
+
+      if (chartInstances.statusDist) { chartInstances.statusDist.destroy(); chartInstances.statusDist = null; }
+      const ctx = dom.statusDistCanvas.getContext('2d');
+      chartInstances.statusDist = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: statuses,
+          datasets: [{
+            label: '数量',
+            data: counts,
+            backgroundColor: statusColors,
+            borderRadius: 4,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, ticks: { stepSize: 1, font: { family: 'Inter', size: 11 } }, grid: { color: '#f1f5f9' } },
+            y: { ticks: { font: { family: 'Inter', size: 12 } }, grid: { display: false } },
+          },
+        },
+      });
+      dom.statusDistSection.classList.remove('hidden');
+    }
+
+    // ============================================================
+    // 10d. 图表#3：遗忘温度极区图
+    // ============================================================
+    function renderPolarChart(ideas) {
+      const coolIdeas = ideas.filter(i => i._temperature < 80).slice(0, 16);
+      if (coolIdeas.length === 0) {
+        dom.polarCanvas.parentElement.classList.add('hidden');
+        dom.polarEmpty.classList.remove('hidden');
+        dom.polarSection.classList.remove('hidden');
+        return;
+      }
+
+      dom.polarCanvas.parentElement.classList.remove('hidden');
+      dom.polarEmpty.classList.add('hidden');
+
+      if (chartInstances.polar) { chartInstances.polar.destroy(); chartInstances.polar = null; }
+      const ctx = dom.polarCanvas.getContext('2d');
+      const labels = coolIdeas.map(i => (i.fields?.Title || '(无标题)').substring(0, 8));
+      const data = coolIdeas.map(i => 100 - i._temperature);
+      const bgColors = coolIdeas.map(i => {
+        const s = i._temperature;
+        if (s < 30) return 'rgba(239,68,68,0.7)';
+        if (s <= 50) return 'rgba(249,115,22,0.7)';
+        return 'rgba(34,197,94,0.7)';
+      });
+
+      chartInstances.polar = new Chart(ctx, {
+        type: 'polarArea',
+        data: { labels, datasets: [{ data, backgroundColor: bgColors, borderColor: '#fff', borderWidth: 2 }] },
+        options: {
+          responsive: true, maintainAspectRatio: true,
+          plugins: {
+            legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { family: 'Inter', size: 9 } } },
+          },
+          scales: { r: { ticks: { display: false }, grid: { color: '#e2e8f0' } } },
+        },
+      });
+      dom.polarSection.classList.remove('hidden');
+    }
+
+    // ============================================================
+    // 11. 全局数据加载与渲染
+    // ============================================================
+    async function loadAndRender() {
+      dom.loading.classList.remove('hidden');
+
+      try {
+        const records = await fetchIdeas();
+        allIdeas = enrichIdeas(records);
+      } catch (err) {
+        console.error('加载数据失败:', err);
+        showToast(`加载失败：${err.message}`, 'error');
+        // 修复 #5：网络失败时保留已有数据，不擦除 allIdeas
+        // 只有首次加载且失败时才显示空状态
+      } finally {
+        dom.loading.classList.add('hidden');
+      }
+
+      // 始终基于当前 allIdeas 渲染（可能是旧数据或空数组）
+      renderDashboard(allIdeas);
+      renderWeeklySummary(allIdeas);
+      renderCompletionChart(allIdeas);
+      renderTrendChart(allIdeas);
+      renderStatusDistChart(allIdeas);
+      renderPolarChart(allIdeas);
+      renderList(allIdeas);
+      dom.dashboardSection.classList.remove('hidden');
+      dom.completionSection.classList.remove('hidden');
+      dom.listSection.classList.remove('hidden');
+    }
+
+    // ============================================================
+    // 12. 标记完成 / 重新打开
+    // ============================================================
+    async function markComplete(recordId) {
+      if (pendingCheckins.has(recordId)) return;
+      pendingCheckins.add(recordId);
+      try {
+        const idea = allIdeas.find(i => i.id === recordId);
+        if (idea) lastActiveStatus.set(recordId, idea.fields?.Status || '念头'); // 修复#1
+        await updateIdea(recordId, { Status: '已完成' });
+        showToast('任务已完成 ✓', 'success');
+        await loadAndRender();
+      } catch (err) {
+        showToast(`标记失败：${err.message}`, 'error');
+      } finally { pendingCheckins.delete(recordId); }
+    }
+
+    async function markReopen(recordId) {
+      if (pendingCheckins.has(recordId)) return;
+      pendingCheckins.add(recordId);
+      try {
+        const prev = lastActiveStatus.get(recordId) || '已计划'; // 修复#1：恢复原状态
+        lastActiveStatus.delete(recordId);
+        await updateIdea(recordId, { Status: prev, LastActionDate: new Date().toISOString().split('T')[0] });
+        showToast('任务已重开', 'info');
+        await loadAndRender();
+      } catch (err) {
+        showToast(`重开失败：${err.message}`, 'error');
+      } finally { pendingCheckins.delete(recordId); }
+    }
+
+    async function deleteIdea(recordId) {
+      const idea = allIdeas.find(i => i.id === recordId);
+      const title = idea?.fields?.Title || '此想法';
+      if (!confirm(`确定要删除「${title}」吗？此操作不可撤销。`)) return;
+      if (pendingCheckins.has(recordId)) return;
+      pendingCheckins.add(recordId);
+      try {
+        await deleteIdeaApi(recordId);
+        showToast(`已删除「${title}」`, 'info');
+        await loadAndRender();
+      } catch (err) {
+        showToast(`删除失败：${err.message}`, 'error');
+      } finally { pendingCheckins.delete(recordId); }
+    }
+
+    function startEdit(recordId) {
+      const idea = allIdeas.find(i => i.id === recordId);
+      if (!idea) return;
+      try {
+        const f = idea.fields || {};
+        document.getElementById('edit-id').value = recordId;
+        document.getElementById('form-title').value = f.Title || '';
+        const typeRadio = document.querySelector(`input[name="Type"][value="${f.Type || 'Task'}"]`);
+        if (typeRadio) { typeRadio.checked = true; typeRadio.dispatchEvent(new Event('change')); }
+        document.querySelectorAll('input[name="Category"]').forEach(cb => {
+          cb.checked = Array.isArray(f.Category) && f.Category.includes(cb.value);
+        });
+        document.getElementById('form-status').value = f.Status || '念头';
+        document.getElementById('form-deadline').value = f.Deadline || '';
+        document.getElementById('form-notes').value = f.Notes || '';
+        dom.formSubmitBtn.textContent = '保存修改';
+        document.getElementById('cancel-edit-btn').classList.remove('hidden');
+        openSidebar();
+      } catch (err) {
+        console.error('编辑失败:', err);
+        showToast('编辑失败，请刷新后重试', 'error');
+      }
+    }
+
+    function cancelEdit() {
+      document.getElementById('edit-id').value = '';
+      dom.ideaForm.reset();
+      const taskRadio = document.querySelector('input[name="Type"][value="Task"]');
+      if (taskRadio) taskRadio.checked = true;
+      document.querySelectorAll('input[name="Category"]').forEach(cb => cb.checked = false);
+      dom.formSubmitBtn.textContent = '提交想法';
+      const cancelBtn = document.getElementById('cancel-edit-btn');
+      if (cancelBtn) cancelBtn.classList.add('hidden');
+      closeSidebar();
+    }
+
+    // ============================================================
+    /**
+     * 对指定想法执行 +1 打卡
+     * @param {string} recordId - Airtable record ID
+     */
+    async function doCheckin(recordId) {
+      // 修复 #1/#4：防止竞态条件和重复点击
+      if (pendingCheckins.has(recordId)) {
+        showToast('打卡处理中，请稍候…', 'info');
+        return;
+      }
+      pendingCheckins.add(recordId);
+
+      // 找到当前记录
+      const idea = allIdeas.find(i => i.id === recordId);
+      if (!idea) {
+        pendingCheckins.delete(recordId);
+        showToast('未找到该想法', 'error');
+        return;
+      }
+
+      const currentCount = (idea.fields?.ActionCount || 0) + 1;
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+      try {
+        await updateIdea(recordId, {
+          ActionCount: currentCount,
+          LastActionDate: today,
+        });
+        showToast('打卡成功！+1 🔥', 'success');
+
+        // 重新加载数据
+        await loadAndRender();
+      } catch (err) {
+        console.error('打卡失败:', err);
+        showToast(`打卡失败：${err.message}`, 'error');
+      } finally {
+        pendingCheckins.delete(recordId);
+      }
+    }
+
+    // ============================================================
+    // 13. 表单提交处理
+    // ============================================================
+    dom.ideaForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      // 收集表单数据
+      const formData = new FormData(dom.ideaForm);
+
+      const title = formData.get('Title')?.trim();
+      if (!title) { showToast('请输入标题', 'error'); return; }
+
+      const editId = document.getElementById('edit-id').value;
+      const type = formData.get('Type');
+      const status = formData.get('Status') || '念头';
+
+      // 多选分类：获取所有选中的 checkbox
+      const categoryCheckboxes = dom.ideaForm.querySelectorAll('input[name="Category"]:checked');
+      const categories = Array.from(categoryCheckboxes).map(cb => cb.value);
+
+      const deadline = formData.get('Deadline') || null;
+      const notes = formData.get('Notes')?.trim() || null;
+
+      // 构建 Airtable fields 对象
+      const fields = {
+        Title: title,
+        Type: type,
+        Status: status,
+        ActionCount: 0, // 新记录从 0 开始
+      };
+
+      // 多选字段：Airtable 接受字符串数组
+      if (categories.length > 0) {
+        fields.Category = categories;
+      }
+
+      // 可选字段
+      if (deadline) {
+        fields.Deadline = deadline;
+      }
+      if (notes) {
+        fields.Notes = notes;
+      }
+
+      // 禁用提交按钮防止重复提交
+      dom.formSubmitBtn.disabled = true;
+      dom.formSubmitBtn.textContent = '提交中…';
+
+      try {
+        if (editId) {
+          await updateIdea(editId, fields);
+          showToast('修改已保存 ✓', 'success');
+          document.getElementById('edit-id').value = '';
+          document.getElementById('cancel-edit-btn').classList.add('hidden');
+          dom.formSubmitBtn.textContent = '提交想法';
+        } else {
+          await createIdea(fields);
+          showToast('想法已记录！✨', 'success');
+        }
+
+        // 重置表单
+        dom.ideaForm.reset();
+        // 重置类型单选按钮（FormData reset 对 radio 需要手动处理）
+        const taskRadio = dom.ideaForm.querySelector('input[value="Task"]');
+        if (taskRadio) taskRadio.checked = true;
+        // 重置分类复选框
+        dom.ideaForm.querySelectorAll('input[name="Category"]').forEach(cb => cb.checked = false);
+
+        // 刷新数据（先刷新再关闭侧边栏）
+        // 修复 #8：closeSidebar 移到 loadAndRender 之后，避免用户看到旧数据
+        await loadAndRender();
+        closeSidebar();
+      } catch (err) {
+        // 修复#2：提交失败时保留表单数据
+        console.error('提交失败:', err);
+        showToast('提交失败，请检查网络后重试，表单内容已保留', 'error');
+        dom.formSubmitBtn.disabled = false;
+        dom.formSubmitBtn.textContent = editId ? '保存修改' : '提交想法';
+        return;
+      } finally {
+        dom.formSubmitBtn.disabled = false;
+        dom.formSubmitBtn.textContent = '提交想法';
+      }
+    });
+
+    // ============================================================
+    // 14. 筛选事件
+    // ============================================================
+    dom.filterSearch.addEventListener('input', () => updateFilterSort());
+    dom.filterType.addEventListener('change', () => { syncQuickFilterBtns(); updateFilterSort(); });
+    dom.filterCategory.addEventListener('change', () => updateFilterSort());
+    dom.filterStatus.addEventListener('change', () => updateFilterSort());
+
+    // 快捷筛选按钮同步
+    function syncQuickFilterBtns() {
+      const val = dom.filterType.value;
+      document.querySelectorAll('.filter-quick-btn').forEach(btn => {
+        const active = btn.dataset.filter === val;
+        btn.className = active
+          ? 'filter-quick-btn px-3 py-1 text-xs font-medium rounded-md transition-colors bg-white text-slate-700 shadow-sm'
+          : 'filter-quick-btn px-3 py-1 text-xs font-medium rounded-md transition-colors text-slate-500 hover:text-slate-700';
+      });
+    }
+    document.querySelectorAll('.filter-quick-btn').forEach(btn => {
+      btn.addEventListener('click', () => { dom.filterType.value = btn.dataset.filter; syncQuickFilterBtns(); updateFilterSort(); });
+    });
+
+    dom.filterClear.addEventListener('click', () => {
+      dom.filterType.value = '';
+      dom.filterCategory.value = '';
+      dom.filterStatus.value = '';
+      dom.filterSearch.value = '';
+      updateFilterSort();
+    });
+
+    // 表头排序点击
+    document.querySelectorAll('#ideas-table th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+        updateFilterSort();
+      });
+    });
+
+    // ============================================================
+    // 多选模式
+    const selectedIds = new Set(); let selectMode = false;
+    function toggleSelectMode() { selectMode = !selectMode; document.getElementById('ideas-table').classList.toggle('select-mode', selectMode); document.getElementById('batch-bar').classList.toggle('active', selectMode); document.getElementById('select-mode-btn').innerHTML = selectMode ? '☑ 退出多选' : '☐ 多选'; if (!selectMode) { selectedIds.clear(); updateBatchCount(); } }
+    function updateBatchCount() { document.getElementById('batch-count').textContent = selectedIds.size; }
+    function handleRowCheck(cb) { cb.checked ? selectedIds.add(cb.dataset.id) : selectedIds.delete(cb.dataset.id); updateBatchCount(); document.getElementById('select-all-cb').checked = false; }
+    async function deleteSelected() { if (selectedIds.size === 0) return; if (!confirm(`确定删除选中的 ${selectedIds.size} 条吗？`)) return; const ids = [...selectedIds]; showToast(`正在删除 ${ids.length} 条…`, 'info'); const results = await Promise.allSettled(ids.map(id => deleteIdeaApi(id).catch(e => null))); let failed = 0; results.forEach(r => { if (r.status === 'rejected') failed++; }); const ok = ids.length - failed; selectedIds.clear(); toggleSelectMode(); showToast(failed ? `已删 ${ok} 条，${failed} 条失败` : `已删除 ${ok} 条`, failed ? 'error' : 'info'); await loadAndRender(); }
+    dom.ideasTbody.addEventListener('change', e => { if (e.target.classList.contains('row-cb')) handleRowCheck(e.target); });
+    // 使用 DOMContentLoaded 延迟绑定，确保 batch-bar 元素已创建
+    document.addEventListener('DOMContentLoaded', () => {
+      var b = document.getElementById('select-mode-btn'); if (b) b.addEventListener('click', toggleSelectMode);
+      b = document.getElementById('batch-cancel-btn'); if (b) b.addEventListener('click', toggleSelectMode);
+      b = document.getElementById('batch-delete-btn'); if (b) b.addEventListener('click', deleteSelected);
+      b = document.getElementById('select-all-cb'); if (b) b.addEventListener('change', function() { document.querySelectorAll('.row-cb').forEach(cb => { cb.checked = this.checked; if (this.checked) selectedIds.add(cb.dataset.id); else selectedIds.delete(cb.dataset.id) }); updateBatchCount(); });
+    });
+
+    // 快速灵感录入（修复#4）
+    document.getElementById('quick-inspire-fab').addEventListener('click', () => {
+      document.getElementById('quick-inspire-modal').classList.remove('hidden');
+      document.getElementById('quick-inspire-title').focus();
+    });
+    document.getElementById('quick-inspire-cancel').addEventListener('click', () => {
+      document.getElementById('quick-inspire-modal').classList.add('hidden');
+    });
+    document.getElementById('quick-inspire-modal').addEventListener('click', function(e) {
+      if (e.target === this) this.classList.add('hidden');
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') document.getElementById('quick-inspire-modal').classList.add('hidden');
+    });
+    document.getElementById('quick-inspire-submit').addEventListener('click', async () => {
+      const title = document.getElementById('quick-inspire-title').value.trim();
+      if (!title) { showToast('请输入灵感标题', 'error'); return; }
+      const cats = Array.from(document.querySelectorAll('#quick-inspire-categories input:checked')).map(cb => cb.value);
+      const fields = { Title: title, Type: 'Inspiration', Status: '待探索', ActionCount: 0 };
+      if (cats.length) fields.Category = cats;
+      try {
+        await createIdea(fields);
+        showToast('灵感已捕捉 ✨', 'success');
+        document.getElementById('quick-inspire-modal').classList.add('hidden');
+        document.getElementById('quick-inspire-title').value = '';
+        document.querySelectorAll('#quick-inspire-categories input').forEach(cb => cb.checked = false);
+        await loadAndRender();
+      } catch (err) {
+        showToast('捕捉失败：' + err.message, 'error');
+      }
+    });
+
+    dom.refreshBtn.addEventListener('click', async () => {
+      dom.refreshBtn.disabled = true;
+      const origHTML = dom.refreshBtn.innerHTML;
+      dom.refreshBtn.innerHTML = '<span class="spinner"></span> 刷新中…';
+      try {
+        await loadAndRender();
+        showToast('数据已刷新', 'info');
+      } finally {
+        dom.refreshBtn.disabled = false;
+        dom.refreshBtn.innerHTML = origHTML;
+      }
+    });
+
+    // ============================================================
+    // 16. 对外暴露 API（供 HTML onclick 调用）
+    // ============================================================
+    window._ideaTracker = {
+      doCheckin,
+      markComplete,
+      markReopen,
+      deleteIdea,
+      startEdit,
+      cancelEdit,
+      addActivityLog, // 预留
+    };
+
+    // ============================================================
+    // 17. 启动：恢复筛选 + 初始加载
+    // ============================================================
+    restoreFilters();
+    loadAndRender().then(() => {
+      console.log('✅ 想法追踪器初始化完成');
+    }).catch(err => {
+      console.error('初始化失败:', err);
+    });
+
+  })(); // IIFE 结束
+  </script>
+
+  <div id="batch-bar" class="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-300 shadow-lg px-4 py-3 flex items-center justify-between">
+    <span class="text-sm text-slate-600">已选 <strong id="batch-count">0</strong> 项</span>
+    <div class="flex gap-3">
+      <button id="batch-cancel-btn" class="px-4 py-1.5 text-sm text-slate-600 hover:bg-gray-100 rounded-lg transition-colors">取消</button>
+      <button id="batch-delete-btn" class="px-4 py-1.5 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors">删除选中</button>
+    </div>
+  </div>
+
+</body>
+</html>
